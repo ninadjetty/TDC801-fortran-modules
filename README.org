@@ -1,0 +1,137 @@
+#+OPTIONS: ^:{}
+#+STARTUP: content
+
+* Introduction
+:PROPERTIES:
+:CREATED:  [2021-09-03 Fri 10:41]
+:END:
+This is a collection of Fortran modules that process the raw time-tag data from TDC801 modules, and an example program that uses these modules to convert the raw time-tags to counts, derive statistics, and cross-correlation.
+
+* Modules
+:PROPERTIES:
+:CREATED:  [2021-09-03 Fri 10:43]
+:END:
+
+** finfo.f95
+:PROPERTIES:
+:CREATED:  [2021-09-03 Fri 10:43]
+:END:
+Module =finfo= contains two subroutines that extract data about the contents of the file being analyzed:
+1. =nrows= determines the number of rows, and
+2. =ncols= determines the number of columns.
+
+When calling =ncols= you can pass whichever separator is used between the columns in the data file:
+1. ";" when the data is separated by semicolons
+2. char(9) when data columns are separated by tabs
+3. " " when data columns are separated by spaces
+4. "," for comma separated value (csv) files
+
+** rdata.f95
+:PROPERTIES:
+:CREATED:  [2021-09-03 Fri 11:06]
+:END:
+Module =rdata= contains the subroutine =readf= that reads the header and actual data from the data file into two arrays =hdr= and =raw=, respectively. Other modules process these data arrays.
+
+** wcnts.f95
+:PROPERTIES:
+:CREATED:  [2021-09-03 Fri 11:07]
+:END:
+Module =wcnts= contains the subroutine =sepfl= that
+1. reads the =raw= data array,
+2. converts the time-tags to real time values =tm=, and also an array in multiples of binning interval =tms=,
+3. trims a fixed number of seconds from either end of the data array, to account for the switching off and on of the monitor during the experiments,
+4. bins the time-tags into singles counts, coincidences, differences (for homodyne detection) or whatever function of the counts, and finally
+5. writes the trimmed array of counts to a separate file with the binning time interval and the trimmed time value included in the filename.
+
+** dstat.f95
+:PROPERTIES:
+:CREATED:  [2021-09-03 Fri 11:08]
+:END:
+Module =dstat= contains the subroutine =stats= that
+1. reads the =raw= data array,
+2. computes the mean, variance, standard deviation, standard error, and the Mandel Q parameter for each data column,
+3. writes this data in another array =stt=, and finally
+4. writes the array to a file with the string =Stat= attached to the input filename.
+
+** dcorr.f95
+:PROPERTIES:
+:CREATED:  [2021-09-03 Fri 11:09]
+:END:
+Module =dcorr= contains the subroutine =correl= that
+1. reads the =raw= data array and the string =crstr= that specifies the two channels between which cross-correlation data is required,
+2. first computes the autocorrelation for all the channels recorded and writes them in a file with =AuCor= appended to the filename, and
+3. then computes the cross-correlation for the channels specified by =crstr= and writes them in a file with =CrCor= appended to the filename.
+
+* Data-Analysis.f95
+:PROPERTIES:
+:CREATED:  [2021-09-03 Fri 11:03]
+:END:
+A minimal program that takes 3 arguments
+1. filename of the time-tags file, without the extension; =txt= is assumed, 
+2. the desired time interval for binning the counts into, to generate the histogram data,
+3. a string that specifies the two channels between which cross-correlation data is required; auto-correlation data is generated for all files automatically.
+
+It performs the following functions:
+1. reads a raw time-tag file with the extension =txt=, e.g. Data1.txt
+2. analyzes the file to convert them into counts per desired time interval, say 1 s,
+3. writes a file with the counts into a file named, e.g. Data1_1.0E+00_8.dat,
+4. in turn reads the counts file Data1_1.0E+00_8.dat and passes its data to the statistics module, generating e.g. Data1_1.0E+00_8_Stat.dat, and finally
+5. also passes the data to the correlator module which write down two files with the autocorrelation and cross-correlation data.
+
+* Usage
+:PROPERTIES:
+:CREATED:  [2021-09-03 Fri 13:32]
+:END:
+Compile the 5 modules first
+#+begin_src fortran :exports code :eval none
+gfortran finfo.f95 rdata.f95 wcnts.f95 dstat.f95 dcorr.f95
+#+end_src
+which will create the =.mod= files.
+
+Then compile the program Data-Analysis.f95 along with all the modules
+#+begin_src fortran :exports code :eval none
+gfortran Data-Analysis.f95 -o da finfo.f95 rdata.f95 wcnts.f95 dstat.f95 dcorr.f95
+#+end_src
+and with your choice of a name for the binary; we choose *da* here.
+
+When you want to run the binary on a raw time-tag file, say Data1.txt, run
+#+begin_src fortran :exports code :eval none
+gfortran Data1 1.0e0 "12"
+#+end_src
+where note that Data1 is the filename without the default =.txt= extension.
+
+Sample output on the terminal looks like
+#+begin_example
+ Analysing file... Data1.txt
+  
+Data1.txt has 2147140 rows, of which 5 are header lines and 2147135 are data points.
+  
+Data1.txt has 2 columns of data separated by ';'.
+  
+Measurement time interval is: 1.0E+00, so the multiplication factor is: 1
+  
+The total time duration of recorded data in the file is: 2.1E+02s.
+  
+Writing trimmed data-subset with 190 data points for analysis to file... Data1_1.0E+00_8.dat
+  
+ Analysing file... Data1_1.0E+00_8.dat
+  
+Data1_1.0E+00_8.dat has 190 rows, of which 0 are header lines and 190 are data points.
+  
+Data1_1.0E+00_8.dat has 4 columns of data separated by ' '.
+  
+Writing statistical properties of data in the 4 columns to file... Data1_1.0E+00_8_Stat.dat
+  
+A table summarizing the statistical properties of data in the 4 columns:
+  
+ No.    AVG      VAR       STDEV    STERR      MANQ
+01   5.25E+03  6.13E+03  7.83E+01  5.68E+00  1.69E-01
+02   5.21E+03  6.50E+03  8.06E+01  5.85E+00  2.47E-01
+03   5.11E-01  5.26E-01  7.25E-01  5.26E-02  3.10E-02
+04   3.17E+01  1.05E+04  1.02E+02  7.43E+00  3.30E+02
+  
+Writing auto correlation properties of data in the 4 columns to file... Data1_1.0E+00_8_Stat_AuCor.dat
+  
+Writing cross correlation properties of data in the 1 columns to file... Data1_1.0E+00_8_Stat_CrCor.dat
+#+end_example
+
