@@ -96,7 +96,7 @@ and with your choice of a name for the binary; we choose *da* here.
 
 When you want to run the binary on a raw time-tag file, say Data1.txt, run
 #+begin_src fortran :exports code :eval none
-gfortran Data1 1.0e0 "12"
+./da Data1 1.0e0 "12"
 #+end_src
 where note that Data1 is the filename without the default =.txt= extension.
 
